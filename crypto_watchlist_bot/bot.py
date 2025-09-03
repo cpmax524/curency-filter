@@ -1,5 +1,6 @@
 import json
 import os
+import asyncio
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 from . import data_collector, analysis
@@ -33,19 +34,29 @@ async def generate_watchlist_report() -> str:
     """
     Fetches data, analyzes it, and generates a formatted string report.
     """
-    watchlist = load_watchlist()
-    rules_config = load_json(RULES_FILE)
-
-    if not watchlist:
-        return "Your watchlist is empty. Add coins with `/setwatchlist`."
-    if not rules_config:
-        return "⚠️ Error: `rules.json` is missing or invalid. Cannot generate report."
-
     # In a real app, you would load these from a secure source
     api_keys = {
         "coingecko": os.getenv("COINGECKO_API_KEY"),
         "etherscan": os.getenv("ETHERSCAN_API_KEY"),
     }
+
+    try:
+        top_tokens = data_collector.get_top_eth_tokens(api_keys.get("coingecko"))
+    except Exception as e:
+        return f"⚠️ Error: Could not fetch the top ETH tokens. Please check your CoinGecko API key. Error: {e}"
+
+    manual_watchlist = load_watchlist()
+
+    # Combine the lists and remove duplicates
+    combined_list = top_tokens + manual_watchlist
+    watchlist = sorted(list(set(combined_list)))
+
+    rules_config = load_json(RULES_FILE)
+
+    if not watchlist:
+        return "Could not retrieve a list of top tokens to analyze."
+    if not rules_config:
+        return "⚠️ Error: `rules.json` is missing or invalid. Cannot generate report."
 
     report_parts = {
         "high": [],
@@ -57,6 +68,9 @@ async def generate_watchlist_report() -> str:
     for coin in watchlist:
         asset_data, errors = data_collector.fetch_all_data(coin, api_keys)
         all_errors.extend(errors)
+
+        # Add a delay to avoid hitting API rate limits.
+        await asyncio.sleep(1)
 
         if not asset_data:
             continue
@@ -98,10 +112,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Sends a welcome message when the /start command is issued."""
     welcome_text = (
         "Welcome to the AI Blockchain Watchlist Agent! 🤖\n\n"
+        "This bot automatically analyzes the top 30 tokens on the Ethereum network, "
+        "and you can also add your own coins to the watchlist.\n\n"
         "Here are the commands you can use:\n"
         "*/start* - Show this welcome message\n"
-        "*/showwatchlist* - Display your current watchlist\n"
-        "*/setwatchlist* <COIN1,...> - Set a new watchlist\n"
+        "*/showwatchlist* - Display your current manual watchlist\n"
+        "*/setwatchlist* <COIN1,...> - Set your manual watchlist\n"
         "*/run* - Manually generate and send the report"
     )
     await update.message.reply_text(welcome_text, parse_mode='Markdown')
@@ -110,9 +126,9 @@ async def show_watchlist_command(update: Update, context: ContextTypes.DEFAULT_T
     """Displays the user's current watchlist."""
     watchlist = load_watchlist()
     if not watchlist:
-        message = "Your watchlist is currently empty. Set one using `/setwatchlist`."
+        message = "Your manual watchlist is currently empty. Set one using `/setwatchlist`."
     else:
-        message = "Your current watchlist:\n" + "\n".join(f"- {coin.capitalize()}" for coin in watchlist)
+        message = "Your manual watchlist:\n" + "\n".join(f"- {coin.capitalize()}" for coin in watchlist)
     await update.message.reply_text(message, parse_mode='Markdown')
 
 async def set_watchlist_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -129,7 +145,7 @@ async def set_watchlist_command(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     save_watchlist(new_watchlist)
-    confirmation_message = "✅ *Watchlist updated successfully!*\n\nYour new watchlist:\n" + "\n".join(f"- {coin.capitalize()}" for coin in new_watchlist)
+    confirmation_message = "✅ *Manual watchlist updated successfully!*\n\nYour new watchlist:\n" + "\n".join(f"- {coin.capitalize()}" for coin in new_watchlist)
     await update.message.reply_text(confirmation_message, parse_mode='Markdown')
 
 async def run_report_command(update: Update, context: ContextTypes.DEFAULT_TYPE):

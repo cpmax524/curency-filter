@@ -1,7 +1,3 @@
 {
-  "coins": [
-    "ethereum",
-    "bitcoin",
-    "chainlink"
-  ]
+  "coins": []
 }

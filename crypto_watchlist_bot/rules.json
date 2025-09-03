@@ -3,50 +3,29 @@
     {
       "metric": "funding_rate",
       "condition": "less_than",
-      "value": -0.0005,
+      "value": -0.0001,
       "score": 3,
-      "reason": "Negative Funding"
+      "reason": "Negative Funding (Bullish)"
     },
     {
-      "metric": "open_interest_change_24h",
+      "metric": "total_supply",
       "condition": "greater_than",
-      "value": 0.20,
-      "score": 2,
-      "reason": "High OI Change"
-    },
-    {
-      "metric": "onchain_tx_count_change_24h",
-      "condition": "greater_than",
-      "value": 0.50,
-      "score": 2,
-      "reason": "Transaction Volume Spike"
-    },
-    {
-      "metric": "exchange_net_flow",
-      "condition": "less_than",
-      "value": -1000,
-      "score": 4,
-      "reason": "Large Net Outflow"
-    },
-    {
-      "metric": "active_addresses_change_24h",
-      "condition": "greater_than",
-      "value": 0.30,
-      "score": 2,
-      "reason": "Active Address Spike"
+      "value": 100000000000,
+      "score": -2,
+      "reason": "Very High Total Supply"
     }
   ],
   "categories": {
     "high": {
-      "min_score": 8,
+      "min_score": 3,
       "label": "🔥 High Priority"
     },
     "medium": {
-      "min_score": 4,
+      "min_score": 1,
       "label": "🔶 Medium Priority"
     },
     "low": {
-      "min_score": 0,
+      "min_score": -5,
       "label": "🧊 Low Priority"
     }
   }
