@@ -1,61 +1,61 @@
-def analyze_asset(data: dict, rules_config: dict) -> tuple[int, list[str]]:
+import time
+from . import data_collector
+
+def filter_tokens(tokens: list) -> list:
     """
-    Analyzes the collected data for an asset based on a set of rules.
-
-    Args:
-        data: A dictionary containing the combined data for the asset.
-        rules_config: A dictionary loaded from the rules.json file.
-
-    Returns:
-        A tuple containing:
-        - The total calculated score for the asset.
-        - A list of strings describing the reasons for the score.
+    Analyzes tokens and returns a list of those that meet the criteria.
     """
-    total_score = 0
-    reasons = []
+    filtered_tokens = []
+    if not tokens:
+        print("No tokens to analyze.")
+        return []
 
-    for rule in rules_config.get("rules", []):
-        metric = rule.get("metric")
-        condition = rule.get("condition")
-        value = rule.get("value")
-        score = rule.get("score")
-        reason = rule.get("reason")
+    print(f"--- Analyzing {len(tokens)} Tokens (GT Score > 70 and Good Distribution) ---")
 
-        if metric not in data:
-            # If the required data point is missing (e.g., API failed), skip this rule.
+    for i, token in enumerate(tokens):
+        # Add a delay to respect API rate limits (e.g., 30 requests/minute).
+        # 60 seconds / 30 requests = 2 seconds per request.
+        time.sleep(2.1)
+
+        token_address_html = token.get('token_address_with_chart', '')
+        asset = token.get('asset', 'N/A')
+        print(f"Processing token {i + 1}/{len(tokens)}: {asset}...")
+
+        token_address = data_collector.extract_token_address(token_address_html)
+
+        if not token_address:
+            print(f"  -> Could not extract address for {asset}. Skipping.")
             continue
 
-        asset_value = data[metric]
+        token_info = data_collector.get_token_info(token_address)
 
-        # Check if the condition for this rule is met
-        if condition == "less_than" and asset_value < value:
-            total_score += score
-            reasons.append(reason)
-        elif condition == "greater_than" and asset_value > value:
-            total_score += score
-            reasons.append(reason)
-        # Add other conditions (e.g., 'equals') here if needed in the future
+        if token_info and 'data' in token_info:
+            attributes = token_info['data'].get('attributes', {})
+            gt_score = attributes.get('gt_score')
 
-    return total_score, reasons
+            if gt_score is not None and gt_score > 70:
+                holders_info = attributes.get('holders', {})
+                distribution = holders_info.get('distribution_percentage', {})
+                top_10_percentage_str = distribution.get('top_10', '100.0')
 
+                try:
+                    top_10_percentage = float(top_10_percentage_str)
+                    # We consider a good distribution if top 10 holders have less than 50%
+                    if top_10_percentage < 50.0:
+                        filtered_tokens.append({
+                            "name": attributes.get('name', 'N/A'),
+                            "symbol": attributes.get('symbol', 'N/A'),
+                            "address": token_address,
+                            "market_cap": token.get('market_cap', 'N/A'),
+                            "gt_score": gt_score,
+                            "top_10_holders": top_10_percentage
+                        })
+                except (ValueError, TypeError):
+                    # Skip if the percentage conversion fails
+                    continue
 
-def categorize_score(score: int, rules_config: dict) -> str:
-    """
-    Categorizes a score into a priority level based on thresholds.
+    # Sort by GT Score descending before returning
+    filtered_tokens.sort(key=lambda x: x['gt_score'], reverse=True)
 
-    Args:
-        score: The score of the asset.
-        rules_config: A dictionary loaded from the rules.json file.
-
-    Returns:
-        A string label for the priority category (e.g., "🔥 High Priority").
-    """
-    categories = rules_config.get("categories", {})
-
-    # Check from highest priority to lowest
-    if score >= categories.get("high", {}).get("min_score", 999):
-        return categories.get("high", {}).get("label", "High Priority")
-    elif score >= categories.get("medium", {}).get("min_score", 999):
-        return categories.get("medium", {}).get("label", "Medium Priority")
-    else:
-        return categories.get("low", {}).get("label", "Low Priority")
+    print(f"--- Analysis Complete: Found {len(filtered_tokens)} promising tokens. ---")
+    return filtered_tokens
